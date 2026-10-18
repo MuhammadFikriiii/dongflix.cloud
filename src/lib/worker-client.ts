@@ -30,7 +30,7 @@ function resolvePublicIpv4(hostname: string): Promise<string[]> {
   if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.addresses);
 
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("public_dns_timeout")), 3_000);
+    const timeout = setTimeout(() => reject(new Error("public_dns_timeout")), 1_500);
     publicResolver.resolve4(hostname, { ttl: true }, (error, records) => {
       clearTimeout(timeout);
       if (error) {
@@ -116,7 +116,7 @@ async function requestWorkerViaPublicDns(
       },
     );
 
-    request.setTimeout(20_000, () => request.destroy(new Error("worker_timeout")));
+    request.setTimeout(7_000, () => request.destroy(new Error("worker_timeout")));
     request.on("error", reject);
     request.end(body ? JSON.stringify(body) : undefined);
   });
@@ -140,7 +140,7 @@ async function requestWorker(
         headers: { [keyHeader]: key, ...(body ? { "Content-Type": "application/json" } : {}) },
         body: body ? JSON.stringify(body) : undefined,
         cache: "no-store",
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(7_000),
       });
       if (!response.ok) throw new Error(`worker_${response.status}`);
       return recordValue(await response.json());
