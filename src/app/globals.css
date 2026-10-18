@@ -447,9 +447,11 @@ button {
   color: var(--accent);
 }
 
-.feature-dialog-icon svg {
-  width: 28px;
-  height: 28px;
+.feature-dialog-icon img {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  object-fit: cover;
 }
 
 .feature-dialog h2 {
