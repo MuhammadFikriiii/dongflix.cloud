@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { CheckCircle2, ChevronLeft, Crown, LogOut, ShieldCheck, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Crown, LogOut, Mail, LockKeyhole, ShieldCheck } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -128,12 +128,24 @@ export function ProfileScreen() {
 
       {!loading && !user ? (
         <section className="profile-login-card">
-          <span className="profile-login-mark"><Sparkles /></span>
-          <h2>Masuk ke DongFlix</h2>
-          <p>Masuk dengan akun Google yang sama seperti di aplikasi DongFlix untuk melanjutkan data akunmu.</p>
+          <h2>Selamat datang kembali</h2>
+          <p>Masuk untuk menyinkronkan daftar tontonan dan melanjutkan aktivitas DongFlix di semua perangkat.</p>
+          <div className="profile-login-fields" aria-label="Formulir login">
+            <label className="profile-input-wrap">
+              <Mail aria-hidden="true" />
+              <input type="email" placeholder="Email" aria-label="Email" autoComplete="email" />
+            </label>
+            <label className="profile-input-wrap">
+              <LockKeyhole aria-hidden="true" />
+              <input type="password" placeholder="Kata sandi" aria-label="Kata sandi" autoComplete="current-password" />
+            </label>
+            <button type="button" className="profile-submit-button" disabled title="Login email akan segera tersedia">Masuk</button>
+          </div>
+          <div className="profile-or-divider"><span>atau</span></div>
           <button type="button" className="google-login-button" onClick={() => void signIn()} disabled={busy}>
             <span className="google-g">G</span>{busy ? "Mengarahkan ke Google..." : "Lanjutkan dengan Google"}
           </button>
+          <p className="profile-login-footnote">Gunakan akun Google yang sama dengan aplikasi DongFlix.</p>
           {error ? <p className="profile-error">{error}</p> : null}
         </section>
       ) : null}
