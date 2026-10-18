@@ -19,13 +19,20 @@ import { webApiUrl } from "@/lib/web-api";
 
 const EMPTY_HOME: HomeCatalog = { donghua: [], anime: [], films: [], unavailable: [] };
 
-const NAVIGATION = [
+type NavigationItem = {
+  label: string;
+  icon: typeof Home;
+  active: boolean;
+  href?: string;
+};
+
+const NAVIGATION: readonly NavigationItem[] = [
   { label: "Beranda", icon: Home, active: true },
   { label: "Novel", icon: BookOpen, active: false },
   { label: "Bookmark", icon: Bookmark, active: false },
   { label: "Riwayat", icon: History, active: false },
-  { label: "Profil", icon: UserRound, active: false },
-] as const;
+  { label: "Profil", icon: UserRound, active: false, href: "/profile" },
+];
 
 async function fetchHome() {
   const response = await fetch(webApiUrl("/api/home"), { cache: "no-store" });
@@ -175,7 +182,12 @@ export function HomeScreen() {
       </div>
 
       <nav className="floating-dock" aria-label="Navigasi utama">
-        {NAVIGATION.map(({ label, icon: Icon, active }) => (
+        {NAVIGATION.map(({ label, icon: Icon, active, href }) => href ? (
+          <Link className="dock-item" href={href} aria-label={label} key={label}>
+            <Icon aria-hidden="true" />
+            <span>{label}</span>
+          </Link>
+        ) : (
           <button
             className={active ? "dock-item active" : "dock-item"}
             type="button"
