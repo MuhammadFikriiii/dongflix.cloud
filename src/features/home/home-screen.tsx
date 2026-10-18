@@ -14,6 +14,7 @@ import {
 import { cleanCatalogSlug, type CatalogItem, type HomeCatalog } from "@/lib/catalog";
 import { ComingSoonDialog } from "@/components/coming-soon-dialog";
 import { PosterCard } from "@/components/poster-card";
+import { SearchDialog } from "@/components/search-dialog";
 import { webApiUrl } from "@/lib/web-api";
 
 const EMPTY_HOME: HomeCatalog = { donghua: [], anime: [], films: [], unavailable: [] };
@@ -97,6 +98,7 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [pendingFeature, setPendingFeature] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,7 +145,7 @@ export function HomeScreen() {
     <main className="app-shell">
       <header className="top-bar">
         <h1>DongFlix</h1>
-        <button className="icon-button" type="button" aria-label="Cari tontonan" onClick={() => setPendingFeature("Pencarian")}>
+        <button className="icon-button" type="button" aria-label="Cari tontonan" onClick={() => setSearchOpen(true)}>
           <Search aria-hidden="true" />
         </button>
       </header>
@@ -191,6 +193,7 @@ export function HomeScreen() {
       </nav>
 
       <ComingSoonDialog feature={pendingFeature} onClose={() => setPendingFeature(null)} />
+      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
     </main>
   );
 }

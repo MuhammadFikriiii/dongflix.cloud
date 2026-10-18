@@ -144,6 +144,25 @@ async function upstream(url: string, key: string) {
 }
 
 async function loadRoute(path: string, search: URLSearchParams, env: Env) {
+  if (path === "/api/search") {
+    const query = (search.get("q") ?? "").trim();
+    if (query.length < 2 || query.length > 80) throw new Error("invalid_query");
+    const encoded = encodeURIComponent(query);
+    const calls = await Promise.allSettled([
+      upstream(`${DONGHUA_ORIGIN}/api/search/${encoded}`, env.UPSTREAM_DONGHUA_KEY),
+      upstream(`${ANIME_ORIGIN}/api/anime/search/${encoded}`, env.UPSTREAM_ANIME_KEY),
+      upstream(`${DONGHUA_ORIGIN}/api/lk21/search?q=${encoded}`, env.UPSTREAM_DONGHUA_KEY),
+    ]);
+    const categories = ["donghua", "anime", "movie"] as const;
+    const items = calls.flatMap((call, index) => call.status === "fulfilled"
+      ? parseItems(call.value).map((item) => ({ ...item, category: categories[index] }))
+      : []);
+    return {
+      items,
+      unavailable: categories.filter((_, index) => calls[index].status === "rejected"),
+    };
+  }
+
   if (path === "/api/home") {
     const calls = await Promise.allSettled([
       upstream(`${DONGHUA_ORIGIN}/api/home/1`, env.UPSTREAM_DONGHUA_KEY),
@@ -151,12 +170,6 @@ async function loadRoute(path: string, search: URLSearchParams, env: Env) {
       upstream(`${DONGHUA_ORIGIN}/api/lk21/home/1`, env.UPSTREAM_DONGHUA_KEY),
     ]);
     const values = calls.map((call) => call.status === "fulfilled" ? call.value : {});
-    console.log("home_upstream_shapes", values.map((value, index) => ({
-      source: ["donghua", "anime", "film"][index],
-      status: calls[index].status,
-      root: Array.isArray(value) ? "array" : typeof value,
-      keys: isRecord(value) ? Object.keys(value).slice(0, 12) : [],
-    })));
     const result = {
       donghua: parseItems(values[0]), anime: parseItems(values[1]), films: parseItems(values[2]),
       unavailable: ["donghua", "anime", "film"].filter((_, index) => calls[index].status === "rejected"),
