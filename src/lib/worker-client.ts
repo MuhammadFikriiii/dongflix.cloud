@@ -30,7 +30,9 @@ function resolvePublicIpv4(hostname: string): Promise<string[]> {
   if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.addresses);
 
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("public_dns_timeout")), 3_000);
     publicResolver.resolve4(hostname, { ttl: true }, (error, records) => {
+      clearTimeout(timeout);
       if (error) {
         reject(error);
         return;
