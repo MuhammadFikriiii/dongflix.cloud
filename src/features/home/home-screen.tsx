@@ -14,6 +14,7 @@ import {
 import { cleanCatalogSlug, type CatalogItem, type HomeCatalog } from "@/lib/catalog";
 import { ComingSoonDialog } from "@/components/coming-soon-dialog";
 import { PosterCard } from "@/components/poster-card";
+import { webApiUrl } from "@/lib/web-api";
 
 const EMPTY_HOME: HomeCatalog = { donghua: [], anime: [], films: [], unavailable: [] };
 
@@ -26,7 +27,7 @@ const NAVIGATION = [
 ] as const;
 
 async function fetchHome() {
-  const response = await fetch("/api/home", { cache: "no-store" });
+  const response = await fetch(webApiUrl("/api/home"), { cache: "no-store" });
   const data = (await response.json()) as HomeCatalog;
   return { response, data };
 }

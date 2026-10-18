@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { PosterCard } from "@/components/poster-card";
 import { cleanCatalogSlug, type CatalogCategory, type CatalogItem } from "@/lib/catalog";
+import { webApiUrl } from "@/lib/web-api";
 
 type CatalogPage = {
   items: CatalogItem[];
@@ -15,7 +16,7 @@ type CatalogPage = {
 };
 
 async function fetchCatalogPage(category: CatalogCategory, page: number) {
-  const response = await fetch(`/api/catalog/${category}?page=${page}`, { cache: "no-store" });
+  const response = await fetch(webApiUrl(`/api/catalog/${category}?page=${page}`), { cache: "no-store" });
   const data = (await response.json()) as CatalogPage;
   if (!response.ok) throw new Error(data.error || "catalog_unavailable");
   return data;

@@ -20,6 +20,7 @@ import Link from "next/link";
 
 import { ComingSoonDialog } from "@/components/coming-soon-dialog";
 import type { DonghuaDetail } from "@/lib/catalog";
+import { webApiUrl } from "@/lib/web-api";
 
 function formatEpisodeTitle(title: string, searchQuery: string) {
   const clean = title.trim();
@@ -62,7 +63,7 @@ export function DonghuaDetailScreen({ slug, kind = "donghua" }: { slug: string; 
     setLoading(true);
     setError(false);
     try {
-      const response = await fetch(`${apiBase}/${encodeURIComponent(slug)}`, { cache: "no-store" });
+      const response = await fetch(webApiUrl(`${apiBase}/${encodeURIComponent(slug)}`), { cache: "no-store" });
       if (!response.ok) throw new Error("detail_unavailable");
       setDetail((await response.json()) as DonghuaDetail);
     } catch {
@@ -74,7 +75,7 @@ export function DonghuaDetailScreen({ slug, kind = "donghua" }: { slug: string; 
 
   useEffect(() => {
     let active = true;
-    void fetch(`${apiBase}/${encodeURIComponent(slug)}`, { cache: "no-store" })
+    void fetch(webApiUrl(`${apiBase}/${encodeURIComponent(slug)}`), { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error("detail_unavailable");
         return response.json() as Promise<DonghuaDetail>;

@@ -20,6 +20,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import type { DongflixResolvedSource, DonghuaDetail, DonghuaEpisodeDetail } from "@/lib/catalog";
+import { webApiUrl } from "@/lib/web-api";
 
 function episodeNumber(value: string) {
   return Number.parseInt(value.match(/(?:episode|ep)[-_\s]*(\d+)/i)?.[1] ?? "", 10) || null;
@@ -255,8 +256,8 @@ export function DonghuaEpisodeScreen({
     setError(false);
     try {
       const [episodeResponse, detailResponse] = await Promise.all([
-        fetch(`${apiBase}/episode/${encodeURIComponent(episodeSlug)}`, { cache: "no-store" }),
-        fetch(`${apiBase}/${encodeURIComponent(showSlug)}`, { cache: "no-store" }),
+        fetch(webApiUrl(`${apiBase}/episode/${encodeURIComponent(episodeSlug)}`), { cache: "no-store" }),
+        fetch(webApiUrl(`${apiBase}/${encodeURIComponent(showSlug)}`), { cache: "no-store" }),
       ]);
       if (!episodeResponse.ok) throw new Error("episode_unavailable");
       const data = (await episodeResponse.json()) as DonghuaEpisodeDetail;
@@ -300,8 +301,8 @@ export function DonghuaEpisodeScreen({
     const controller = new AbortController();
     const options = { cache: "no-store" as const, signal: controller.signal };
     void Promise.all([
-      fetch(`${apiBase}/episode/${encodeURIComponent(episodeSlug)}`, options),
-      fetch(`${apiBase}/${encodeURIComponent(showSlug)}`, options),
+      fetch(webApiUrl(`${apiBase}/episode/${encodeURIComponent(episodeSlug)}`), options),
+      fetch(webApiUrl(`${apiBase}/${encodeURIComponent(showSlug)}`), options),
     ])
       .then(async ([episodeResponse, detailResponse]) => {
         if (!episodeResponse.ok) throw new Error("episode_unavailable");
