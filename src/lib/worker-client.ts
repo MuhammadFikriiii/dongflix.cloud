@@ -108,7 +108,8 @@ async function requestWorkerViaPublicDns(
           }
 
           try {
-            resolve(recordValue(JSON.parse(Buffer.concat(chunks).toString("utf8"))));
+            const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+            resolve(Array.isArray(parsed) ? { data: parsed } : recordValue(parsed));
           } catch {
             reject(new Error("worker_invalid_json"));
           }
@@ -143,7 +144,8 @@ async function requestWorker(
         signal: AbortSignal.timeout(7_000),
       });
       if (!response.ok) throw new Error(`worker_${response.status}`);
-      return recordValue(await response.json());
+      const parsed: unknown = await response.json();
+      return Array.isArray(parsed) ? { data: parsed } : recordValue(parsed);
     } catch (fetchError) {
       // Some networks poison workers.dev DNS. Keep the public-DNS path as a
       // fallback for those environments, but never let its failure hide the

@@ -71,21 +71,27 @@ export function cleanCatalogSlug(slug: string) {
 }
 
 export function parseItems(value: unknown): CatalogItem[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    if (!isRecord(value)) return [];
+    const nested = value.data ?? value.items ?? value.results ?? value.latest_release
+      ?? value.ongoing ?? value.ongoing_anime ?? value.ongoing_donghua
+      ?? value.completed_donghua ?? value.popular_today;
+    return nested === value ? [] : parseItems(nested);
+  }
 
   return value.flatMap((entry) => {
     if (!isRecord(entry)) return [];
     const title = stringValue(entry.title).trim();
-    const poster = stringValue(entry.poster).trim();
+    const poster = stringValue(entry.poster || entry.image || entry.thumbnail || entry.cover).trim();
     if (!title || !poster) return [];
 
     return [{
       title,
       slug: stringValue(entry.slug),
-      animeSlug: stringValue(entry.anime_slug),
+      animeSlug: stringValue(entry.anime_slug || entry.animeSlug || entry.series_slug || entry.id),
       poster,
-      episode: stringValue(entry.ep),
-      type: stringValue(entry.type),
+      episode: stringValue(entry.ep || entry.episode || entry.episode_number),
+      type: stringValue(entry.type || entry.category),
     }];
   });
 }
