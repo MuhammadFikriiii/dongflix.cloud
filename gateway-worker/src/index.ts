@@ -1,6 +1,7 @@
 type Env = {
   UPSTREAM_DONGHUA_KEY: string;
   UPSTREAM_ANIME_KEY: string;
+  SUPABASE_ANON_KEY: string;
   PUBLIC_API_LIMITER: RateLimit;
 };
 
@@ -9,6 +10,7 @@ type Kind = "donghua" | "anime" | "movie";
 
 const DONGHUA_ORIGIN = "https://donghuawatch-worker.antigravityfikri.workers.dev";
 const ANIME_ORIGIN = "https://donghuawatch-anime-api.fikri772277.workers.dev";
+const SUPABASE_ORIGIN = "https://zochumrjbzmdtfiaezyx.supabase.co";
 const ALLOWED_ORIGINS = new Set([
   "https://dongflix-web.vercel.app",
   "https://dongflix.cloud",
@@ -65,6 +67,39 @@ function parseItems(value: unknown, depth = 0): JsonRecord[] {
       episode: text(item.ep || item.episode || item.episode_number),
       type: text(item.type || item.category),
     }];
+  });
+}
+
+async function fetchCustomPosters(env: Env) {
+  try {
+    const response = await fetch(`${SUPABASE_ORIGIN}/rest/v1/donghua_posters?select=anime_slug,poster_url`, {
+      headers: {
+        apikey: env.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return new Map<string, string>();
+    const rows = await response.json() as unknown;
+    if (!Array.isArray(rows)) return new Map<string, string>();
+    return new Map(rows.flatMap((entry) => {
+      const row = record(entry);
+      const slug = text(row.anime_slug).trim();
+      const poster = text(row.poster_url).trim();
+      return slug && poster ? [[slug, poster] as const] : [];
+    }));
+  } catch {
+    return new Map<string, string>();
+  }
+}
+
+function applyCustomPosters(items: JsonRecord[], posters: Map<string, string>) {
+  if (!posters.size) return items;
+  return items.map((item) => {
+    const slug = text(item.animeSlug || item.slug).trim();
+    const poster = posters.get(slug);
+    return poster ? { ...item, poster } : item;
   });
 }
 
@@ -148,14 +183,18 @@ async function loadRoute(path: string, search: URLSearchParams, env: Env) {
     const query = (search.get("q") ?? "").trim();
     if (query.length < 2 || query.length > 80) throw new Error("invalid_query");
     const encoded = encodeURIComponent(query);
-    const calls = await Promise.allSettled([
-      upstream(`${DONGHUA_ORIGIN}/api/search/${encoded}`, env.UPSTREAM_DONGHUA_KEY),
-      upstream(`${ANIME_ORIGIN}/api/anime/search/${encoded}`, env.UPSTREAM_ANIME_KEY),
-      upstream(`${DONGHUA_ORIGIN}/api/lk21/search?q=${encoded}`, env.UPSTREAM_DONGHUA_KEY),
+    const [calls, customPosters] = await Promise.all([
+      Promise.allSettled([
+        upstream(`${DONGHUA_ORIGIN}/api/search/${encoded}`, env.UPSTREAM_DONGHUA_KEY),
+        upstream(`${ANIME_ORIGIN}/api/anime/search/${encoded}`, env.UPSTREAM_ANIME_KEY),
+        upstream(`${DONGHUA_ORIGIN}/api/lk21/search?q=${encoded}`, env.UPSTREAM_DONGHUA_KEY),
+      ]),
+      fetchCustomPosters(env),
     ]);
     const categories = ["donghua", "anime", "movie"] as const;
     const items = calls.flatMap((call, index) => call.status === "fulfilled"
-      ? parseItems(call.value).map((item) => ({ ...item, category: categories[index] }))
+      ? (index === 0 ? applyCustomPosters(parseItems(call.value), customPosters) : parseItems(call.value))
+        .map((item) => ({ ...item, category: categories[index] }))
       : []);
     return {
       items,
@@ -164,14 +203,18 @@ async function loadRoute(path: string, search: URLSearchParams, env: Env) {
   }
 
   if (path === "/api/home") {
-    const calls = await Promise.allSettled([
-      upstream(`${DONGHUA_ORIGIN}/api/home/1`, env.UPSTREAM_DONGHUA_KEY),
-      upstream(`${ANIME_ORIGIN}/api/anime/ongoing/1`, env.UPSTREAM_ANIME_KEY),
-      upstream(`${DONGHUA_ORIGIN}/api/lk21/home/1`, env.UPSTREAM_DONGHUA_KEY),
+    const [calls, customPosters] = await Promise.all([
+      Promise.allSettled([
+        upstream(`${DONGHUA_ORIGIN}/api/home/1`, env.UPSTREAM_DONGHUA_KEY),
+        upstream(`${ANIME_ORIGIN}/api/anime/ongoing/1`, env.UPSTREAM_ANIME_KEY),
+        upstream(`${DONGHUA_ORIGIN}/api/lk21/home/1`, env.UPSTREAM_DONGHUA_KEY),
+      ]),
+      fetchCustomPosters(env),
     ]);
     const values = calls.map((call) => call.status === "fulfilled" ? call.value : {});
     const result = {
-      donghua: parseItems(values[0]), anime: parseItems(values[1]), films: parseItems(values[2]),
+      donghua: applyCustomPosters(parseItems(values[0]), customPosters),
+      anime: parseItems(values[1]), films: parseItems(values[2]),
       unavailable: ["donghua", "anime", "film"].filter((_, index) => calls[index].status === "rejected"),
     };
     if (!result.donghua.length && !result.anime.length && !result.films.length) throw new Error("empty_home");
@@ -185,7 +228,12 @@ async function loadRoute(path: string, search: URLSearchParams, env: Env) {
     const url = category === "donghua" ? `${DONGHUA_ORIGIN}/api/home/${page}`
       : category === "anime" ? `${ANIME_ORIGIN}/api/anime/ongoing/${page}`
         : `${DONGHUA_ORIGIN}/api/lk21/home/${page}`;
-    const items = parseItems(await upstream(url, category === "anime" ? env.UPSTREAM_ANIME_KEY : env.UPSTREAM_DONGHUA_KEY));
+    const [value, customPosters] = await Promise.all([
+      upstream(url, category === "anime" ? env.UPSTREAM_ANIME_KEY : env.UPSTREAM_DONGHUA_KEY),
+      category === "donghua" ? fetchCustomPosters(env) : Promise.resolve(new Map<string, string>()),
+    ]);
+    const parsedItems = parseItems(value);
+    const items = category === "donghua" ? applyCustomPosters(parsedItems, customPosters) : parsedItems;
     return { items, page, hasMore: items.length > 0 };
   }
 
@@ -199,8 +247,14 @@ async function loadRoute(path: string, search: URLSearchParams, env: Env) {
   if (kind === "donghua") url = `${DONGHUA_ORIGIN}/api/${episode ? "episode" : "detail"}/${encodeURIComponent(slug)}`;
   else if (kind === "anime") url = `${ANIME_ORIGIN}/api/anime/${episode ? "episode" : "detail"}/${encodeURIComponent(slug)}`;
   else url = `${DONGHUA_ORIGIN}/api/lk21/${episode ? "episode" : "detail"}/${encodeURIComponent(slug)}?refresh=true`;
-  const value = await upstream(url, kind === "anime" ? env.UPSTREAM_ANIME_KEY : env.UPSTREAM_DONGHUA_KEY);
-  return episode ? parseEpisode(value) : parseDetail(value, kind);
+  const [value, customPosters] = await Promise.all([
+    upstream(url, kind === "anime" ? env.UPSTREAM_ANIME_KEY : env.UPSTREAM_DONGHUA_KEY),
+    kind === "donghua" && !episode ? fetchCustomPosters(env) : Promise.resolve(new Map<string, string>()),
+  ]);
+  if (episode) return parseEpisode(value);
+  const detail = parseDetail(value, kind);
+  const customPoster = kind === "donghua" ? customPosters.get(slug) : undefined;
+  return customPoster ? { ...detail, poster: customPoster } : detail;
 }
 
 export default {
@@ -217,7 +271,7 @@ export default {
 
     const cache = caches.default;
     const cacheUrl = new URL(url);
-    cacheUrl.searchParams.set("__gateway_cache", "v2");
+    cacheUrl.searchParams.set("__gateway_cache", "v3");
     const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
     const cached = await cache.match(cacheKey);
     let stale: { value: unknown; savedAt: number } | null = null;
