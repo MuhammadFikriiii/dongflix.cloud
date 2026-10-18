@@ -127,12 +127,11 @@ async function requestWorker(
   body?: Record<string, unknown>,
 ) {
   if (!key) throw new Error("worker_key_missing");
+
+  // Vercel's serverless runtime already has a healthy public DNS path. Try it
+  // first so a custom UDP resolver cannot hold the request open when that
+  // protocol is restricted by the hosting provider.
   try {
-    return await requestWorkerViaPublicDns(url, key, keyHeader, body);
-  } catch (publicDnsError) {
-    // Some serverless hosts block outbound DNS on port 53 even though their
-    // normal resolver is healthy. Keep production portable by falling back to
-    // the platform fetch path; the local XL case succeeds on the first path.
     try {
       const response = await fetch(url, {
         method: body ? "POST" : "GET",
@@ -143,9 +142,18 @@ async function requestWorker(
       });
       if (!response.ok) throw new Error(`worker_${response.status}`);
       return recordValue(await response.json());
-    } catch {
-      throw publicDnsError;
+    } catch (fetchError) {
+      // Some networks poison workers.dev DNS. Keep the public-DNS path as a
+      // fallback for those environments, but never let its failure hide the
+      // original fetch error.
+      try {
+        return await requestWorkerViaPublicDns(url, key, keyHeader, body);
+      } catch {
+        throw fetchError;
+      }
     }
+  } catch (error) {
+    throw error;
   }
 }
 
