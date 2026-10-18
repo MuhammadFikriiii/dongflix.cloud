@@ -70,25 +70,40 @@ export function cleanCatalogSlug(slug: string) {
   return slug.replace(/^\/(?:anime|movie|series)\//, "").replace(/^\/+|\/+$/g, "");
 }
 
-export function parseItems(value: unknown): CatalogItem[] {
+export function parseItems(value: unknown, depth = 0): CatalogItem[] {
   if (!Array.isArray(value)) {
-    if (!isRecord(value)) return [];
-    const nested = value.data ?? value.items ?? value.results ?? value.latest_release
-      ?? value.ongoing ?? value.ongoing_anime ?? value.ongoing_donghua
-      ?? value.completed_donghua ?? value.popular_today;
-    return nested === value ? [] : parseItems(nested);
+    if (!isRecord(value) || depth >= 5) return [];
+    const preferred = [
+      value.data, value.items, value.results, value.latest_release, value.ongoing,
+      value.ongoing_anime, value.ongoing_donghua, value.completed_donghua,
+      value.popular_today,
+    ];
+    for (const nested of preferred) {
+      const parsed = parseItems(nested, depth + 1);
+      if (parsed.length) return parsed;
+    }
+    for (const nested of Object.values(value)) {
+      const parsed = parseItems(nested, depth + 1);
+      if (parsed.length) return parsed;
+    }
+    return [];
   }
 
   return value.flatMap((entry) => {
     if (!isRecord(entry)) return [];
-    const title = stringValue(entry.title).trim();
-    const poster = stringValue(entry.poster || entry.image || entry.thumbnail || entry.cover).trim();
+    const title = stringValue(entry.title || entry.name).trim();
+    const poster = stringValue(
+      entry.poster || entry.image || entry.thumbnail || entry.cover
+      || entry.poster_url || entry.image_url,
+    ).trim();
     if (!title || !poster) return [];
 
     return [{
       title,
-      slug: stringValue(entry.slug),
-      animeSlug: stringValue(entry.anime_slug || entry.animeSlug || entry.series_slug || entry.id),
+      slug: stringValue(entry.slug || entry.episode_slug || entry.url_slug),
+      animeSlug: stringValue(
+        entry.anime_slug || entry.animeSlug || entry.series_slug || entry.detail_slug || entry.id,
+      ),
       poster,
       episode: stringValue(entry.ep || entry.episode || entry.episode_number),
       type: stringValue(entry.type || entry.category),
