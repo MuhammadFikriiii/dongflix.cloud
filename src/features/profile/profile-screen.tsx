@@ -3,7 +3,27 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { CheckCircle2, ChevronLeft, Crown, LogOut, Mail, LockKeyhole, ShieldCheck } from "lucide-react";
+import {
+  BookOpen,
+  Camera,
+  CheckCircle2,
+  ChevronLeft,
+  Clapperboard,
+  Crown,
+  Eye,
+  Film,
+  LockKeyhole,
+  LogOut,
+  Mail,
+  MessageCircle,
+  Paintbrush,
+  Palette,
+  Play,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -18,6 +38,10 @@ type ProfileRow = {
   is_admin: boolean | null;
   show_admin_badge: boolean | null;
   profile_header_colors: string[] | null;
+  cultivation_path: string | null;
+  name_color: string | null;
+  premium_name_color: string | null;
+  premium_badge_hex: string | null;
 };
 
 const fallbackColors = ["#5865F2"];
@@ -61,7 +85,7 @@ export function ProfileScreen() {
     }
     const { data, error: profileError } = await supabase
       .from("profiles")
-      .select("display_name, avatar_path, exp, premium_until, premium_badge_visible, premium_verified_color, is_admin, show_admin_badge, profile_header_colors")
+      .select("display_name, avatar_path, exp, premium_until, premium_badge_visible, premium_verified_color, is_admin, show_admin_badge, profile_header_colors, cultivation_path, name_color, premium_name_color, premium_badge_hex")
       .eq("id", currentUser.id)
       .maybeSingle();
     setProfile(profileError ? null : data as ProfileRow | null);
@@ -115,6 +139,10 @@ export function ProfileScreen() {
   const premium = Boolean(premiumUntil && premiumUntil > new Date());
   const verified = (profile?.is_admin && profile.show_admin_badge) || (premium && profile?.premium_badge_visible);
   const colors = profile?.profile_header_colors?.filter((color) => /^#[0-9a-f]{6}$/i.test(color)) ?? fallbackColors;
+  const nameColor = premium ? profile?.premium_name_color : profile?.name_color;
+  const expForNextLevel = level >= 100 ? exp : Math.round(level * level * 1020.3);
+  const expBase = level <= 1 ? 0 : Math.round((level - 1) * (level - 1) * 1020.3);
+  const expProgress = level >= 100 ? 100 : Math.max(0, Math.min(100, ((exp - expBase) / Math.max(1, expForNextLevel - expBase)) * 100));
 
   return (
     <main className="profile-page">
@@ -152,31 +180,69 @@ export function ProfileScreen() {
 
       {!loading && user ? (
         <div className="profile-content">
-          <ProfileHeader colors={colors}>
-            <div className="profile-avatar" aria-label={`Avatar ${name}`}>
-              {avatar ? <Image src={avatar} alt="" fill sizes="94px" unoptimized referrerPolicy="no-referrer" /> : <span>{name.slice(0, 1).toUpperCase()}</span>}
-            </div>
-            <div className="profile-identity">
-              <div className="profile-name-row">
-                <strong>{name}</strong>
-                {verified ? <CheckCircle2 size={18} color={premium ? profile?.premium_verified_color || "#F8C35A" : "#2196F3"} fill="currentColor" /> : null}
-                {premium ? <span className="premium-chip"><Crown size={12} /> Premium</span> : null}
+          <section className="profile-shell-card">
+            <div className="profile-identity-block">
+              <ProfileHeader colors={colors}>
+                <button type="button" className="profile-color-button" title="Fitur segera tersedia"><Palette /> Ganti warna</button>
+                <div className="profile-avatar" aria-label={`Avatar ${name}`}>
+                  {avatar ? <Image src={avatar} alt="" fill sizes="96px" unoptimized referrerPolicy="no-referrer" /> : <span>{name.slice(0, 1).toUpperCase()}</span>}
+                  <span className="profile-camera-badge"><Camera /></span>
+                </div>
+                <div className="profile-identity">
+                  <div className="profile-name-row">
+                    <strong style={nameColor ? { color: nameColor } : undefined}>{name}</strong>
+                    {verified ? <CheckCircle2 size={18} color={premium ? profile?.premium_verified_color || "#F8C35A" : "#2196F3"} fill="currentColor" /> : null}
+                    {premium ? <span className="premium-chip" style={profile?.premium_badge_hex ? { color: profile.premium_badge_hex } : undefined}><Crown size={12} /> Premium</span> : null}
+                  </div>
+                  <span>{email}</span>
+                </div>
+              </ProfileHeader>
+
+              <div className="profile-rank-chip"><Sparkles /> {profile?.cultivation_path === "level" || !profile?.cultivation_path ? `Level ${level}` : `${profile.cultivation_path} • Level ${level}`}</div>
+
+              <div className="profile-preview-actions">
+                <button type="button" title="Fitur segera tersedia"><Eye /> Preview profil</button>
+                <button type="button" title="Fitur segera tersedia"><MessageCircle /> Preview komentar</button>
               </div>
-              <span>{email}</span>
+
+              <div className="profile-custom-actions">
+                <button type="button" title="Fitur segera tersedia"><Paintbrush /> Warna nama</button>
+                <button type="button" title="Fitur segera tersedia"><Sparkles /> Kultivasi</button>
+              </div>
             </div>
-          </ProfileHeader>
 
-          <section className="profile-stats" aria-label="Statistik akun">
-            <div><span>Level</span><strong>{level}</strong></div>
-            <div><span>EXP</span><strong>{formatNumber(exp)}</strong></div>
-            <div><span>Status</span><strong>{premium ? "Premium" : "Gratis"}</strong></div>
+            <section className="profile-level-card" aria-label="Level dan EXP akun">
+              <div className="profile-level-head">
+                <strong>Level {level}</strong>
+                <span>{level >= 100 ? "MAX ✨" : `${formatNumber(exp)} / ${formatNumber(expForNextLevel)} EXP`}</span>
+              </div>
+              <div className="profile-exp-track"><span style={{ width: `${expProgress}%` }} /></div>
+              {level < 100 ? <small>{formatNumber(Math.max(0, expForNextLevel - exp))} EXP menuju Level {level + 1}</small> : null}
+            </section>
+
+            <section className="profile-social-card">
+              <div className="profile-social-counters">
+                <div><strong>0</strong><span>Pengikut</span></div>
+                <div><strong>0</strong><span>Mengikuti</span></div>
+                <div><strong>0</strong><span>Koin</span></div>
+              </div>
+              <div className="profile-social-actions">
+                <button type="button" title="Fitur segera tersedia"><Users /> Koneksi</button>
+                <button type="button" title="Fitur segera tersedia"><Search /> Cari</button>
+              </div>
+              <div className="profile-social-divider" />
+              <h2>Jejak tontonan</h2>
+              <div className="profile-watch-counters">
+                <div><Film /><strong>0</strong><span>Anime</span></div>
+                <div><Play /><strong>0</strong><span>Donghua</span></div>
+                <div><Clapperboard /><strong>0</strong><span>Movie</span></div>
+                <div><BookOpen /><strong>0</strong><span>Bab Novel</span></div>
+              </div>
+            </section>
           </section>
 
-          <section className="profile-section">
-            <h2>Akun & sinkronisasi</h2>
-            <div className="profile-row"><ShieldCheck /><span>Login tersinkron dengan APK, EXE, dan web</span></div>
-            <button type="button" className="profile-signout" onClick={() => void signOut()} disabled={busy}><LogOut /> Keluar dari akun</button>
-          </section>
+          <div className="profile-sync-note"><ShieldCheck /><span>Login tersinkron dengan APK, EXE, dan web</span></div>
+          <button type="button" className="profile-signout" onClick={() => void signOut()} disabled={busy}><LogOut /> Keluar</button>
           {error ? <p className="profile-error">{error}</p> : null}
         </div>
       ) : null}
