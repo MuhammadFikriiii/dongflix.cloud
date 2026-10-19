@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -44,6 +44,12 @@ type ProfileRow = {
   premium_badge_hex: string | null;
 };
 
+type SocialStats = {
+  followers_count?: number; following_count?: number; coins_total?: number;
+  anime_watched_count?: number; donghua_watched_count?: number;
+  movie_watched_count?: number; novel_read_count?: number;
+};
+
 const fallbackColors = ["#5865F2"];
 
 function levelFromExp(rawExp: number) {
@@ -69,6 +75,9 @@ export function ProfileScreen() {
   const [loading, setLoading] = useState(hasAuthConfig);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [social, setSocial] = useState<SocialStats>({});
+  const [preview, setPreview] = useState<"profile" | "comment" | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadProfile = useCallback(async (currentUser: User | null) => {
     setUser(currentUser);
@@ -83,12 +92,15 @@ export function ProfileScreen() {
       setLoading(false);
       return;
     }
-    const { data, error: profileError } = await supabase
-      .from("profiles")
-      .select("display_name, avatar_path, exp, premium_until, premium_badge_visible, premium_verified_color, is_admin, show_admin_badge, profile_header_colors, cultivation_path, name_color, premium_name_color, premium_badge_hex")
-      .eq("id", currentUser.id)
-      .maybeSingle();
+    const [profileResult, socialResult] = await Promise.all([
+      supabase.from("profiles")
+        .select("display_name, avatar_path, exp, premium_until, premium_badge_visible, premium_verified_color, is_admin, show_admin_badge, profile_header_colors, cultivation_path, name_color, premium_name_color, premium_badge_hex")
+        .eq("id", currentUser.id).maybeSingle(),
+      supabase.rpc("get_public_social_profile", { p_user_id: currentUser.id }),
+    ]);
+    const { data, error: profileError } = profileResult;
     setProfile(profileError ? null : data as ProfileRow | null);
+    setSocial((socialResult.data ?? {}) as SocialStats);
     if (profileError) setError("Profil belum dapat dimuat. Coba buka kembali halaman ini.");
     setLoading(false);
   }, []);
@@ -129,10 +141,93 @@ export function ProfileScreen() {
     setBusy(false);
   };
 
+  const refresh = async () => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    const { data } = await supabase.auth.getUser();
+    await loadProfile(data.user);
+  };
+
+  const editName = async () => {
+    if (!user) return;
+    const next = window.prompt("Nama profil", name)?.trim();
+    if (!next || next === name) return;
+    const supabase = getSupabaseBrowserClient();
+    const result = await supabase?.from("profiles").update({ display_name: next }).eq("id", user.id);
+    if (result?.error) return setError("Nama belum dapat diperbarui.");
+    await refresh();
+  };
+
+  const editHeaderColors = async () => {
+    const raw = window.prompt("Masukkan maksimal 3 warna HEX, pisahkan dengan koma", colors.join(", "));
+    if (!raw) return;
+    const next = raw.split(",").map((value) => value.trim()).filter((value) => /^#[0-9a-f]{6}$/i.test(value)).slice(0, 3);
+    if (!next.length) return setError("Gunakan kode warna HEX, contoh #5865F2.");
+    const result = await getSupabaseBrowserClient()?.rpc("set_profile_header_colors", { p_colors: next });
+    if (result?.error) return setError("Warna header belum dapat disimpan.");
+    await refresh();
+  };
+
+  const editCultivation = async () => {
+    const next = window.prompt("Pilih tampilan: level, martial, immortal, soul_land, atau perfect_world", profile?.cultivation_path || "level")?.trim();
+    if (!next) return;
+    const result = await getSupabaseBrowserClient()?.rpc("set_cultivation_path", { p_path: next });
+    if (result?.error) return setError("Pilihan tingkat kultivasi belum dapat disimpan.");
+    await refresh();
+  };
+
+  const editNameColor = async () => {
+    if (!user) return;
+    const next = window.prompt("Warna nama (HEX)", nameColor || "#FFFFFF")?.trim();
+    if (!next || !/^#[0-9a-f]{6}$/i.test(next)) return setError("Gunakan kode warna HEX, contoh #F59E0B.");
+    const result = await getSupabaseBrowserClient()?.from("profiles").update({ name_color: next.toUpperCase() }).eq("id", user.id);
+    if (result?.error) return setError("Warna ini belum terbuka untuk akunmu.");
+    await refresh();
+  };
+
+  const uploadAvatar = async (file: File | undefined) => {
+    if (!file || !user) return;
+    if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) return setError("Pilih gambar maksimal 5 MB.");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    setBusy(true);
+    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const objectPath = `${user.id}/${Date.now()}.${extension}`;
+    const uploaded = await supabase.storage.from("avatars").upload(objectPath, file, { upsert: false });
+    if (!uploaded.error) await supabase.from("profiles").update({ avatar_path: objectPath }).eq("id", user.id);
+    setBusy(false);
+    if (uploaded.error) return setError("Foto profil belum dapat diunggah.");
+    await refresh();
+  };
+
+  const showConnections = async () => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    const [followers, following] = await Promise.all([
+      supabase.rpc("list_my_social_connections", { p_kind: "followers", p_offset: 0, p_limit: 30 }),
+      supabase.rpc("list_my_social_connections", { p_kind: "following", p_offset: 0, p_limit: 30 }),
+    ]);
+    const names = [...(followers.data ?? []), ...(following.data ?? [])].map((item: { display_name?: string }) => item.display_name).filter(Boolean);
+    window.alert(names.length ? `Koneksi:\n${[...new Set(names)].join("\n")}` : "Belum ada koneksi.");
+  };
+
+  const searchPeople = async () => {
+    const query = window.prompt("Cari nama pengguna")?.trim();
+    if (!query || query.length < 2) return;
+    const result = await getSupabaseBrowserClient()?.rpc("search_social_profiles", { p_query: query, p_limit: 20 });
+    const names = (result?.data ?? []).map((item: { display_name?: string; account_level?: number }) => `${item.display_name ?? "Pengguna"} • Level ${item.account_level ?? 1}`);
+    window.alert(names.length ? names.join("\n") : "Pengguna tidak ditemukan.");
+  };
+
   const metadata = user?.user_metadata ?? {};
   const name = profile?.display_name?.trim() || metadata.full_name || metadata.name || user?.email?.split("@")[0] || "Pengguna DongFlix";
   const email = user?.email ?? "";
-  const avatar = profile?.avatar_path || metadata.avatar_url || metadata.picture || "";
+  const storedAvatar = profile?.avatar_path || "";
+  const avatar = storedAvatar.startsWith("http")
+    ? storedAvatar
+    : storedAvatar
+      ? getSupabaseBrowserClient()?.storage.from("avatars").getPublicUrl(storedAvatar).data.publicUrl || ""
+      : metadata.avatar_url || metadata.picture || "";
   const exp = Number(profile?.exp ?? 0) || 0;
   const level = levelFromExp(exp);
   const premiumUntil = profile?.premium_until ? new Date(profile.premium_until) : null;
@@ -183,31 +278,32 @@ export function ProfileScreen() {
           <section className="profile-shell-card">
             <div className="profile-identity-block">
               <ProfileHeader colors={colors}>
-                <button type="button" className="profile-color-button" title="Fitur segera tersedia"><Palette /> Ganti warna</button>
-                <div className="profile-avatar" aria-label={`Avatar ${name}`}>
+                <button type="button" className="profile-color-button" onClick={() => void editHeaderColors()}><Palette /> Ganti warna</button>
+                <button type="button" className="profile-avatar" aria-label={`Ganti avatar ${name}`} onClick={() => fileInputRef.current?.click()}>
                   {avatar ? <Image src={avatar} alt="" fill sizes="96px" unoptimized referrerPolicy="no-referrer" /> : <span>{name.slice(0, 1).toUpperCase()}</span>}
                   <span className="profile-camera-badge"><Camera /></span>
-                </div>
-                <div className="profile-identity">
+                </button>
+                <input ref={fileInputRef} className="profile-file-input" type="file" accept="image/*" onChange={(event) => void uploadAvatar(event.target.files?.[0])} />
+                <button type="button" className="profile-identity" onClick={() => void editName()}>
                   <div className="profile-name-row">
                     <strong style={nameColor ? { color: nameColor } : undefined}>{name}</strong>
                     {verified ? <CheckCircle2 size={18} color={premium ? profile?.premium_verified_color || "#F8C35A" : "#2196F3"} fill="currentColor" /> : null}
                     {premium ? <span className="premium-chip" style={profile?.premium_badge_hex ? { color: profile.premium_badge_hex } : undefined}><Crown size={12} /> Premium</span> : null}
                   </div>
                   <span>{email}</span>
-                </div>
+                </button>
               </ProfileHeader>
 
               <div className="profile-rank-chip"><Sparkles /> {profile?.cultivation_path === "level" || !profile?.cultivation_path ? `Level ${level}` : `${profile.cultivation_path} • Level ${level}`}</div>
 
               <div className="profile-preview-actions">
-                <button type="button" title="Fitur segera tersedia"><Eye /> Preview profil</button>
-                <button type="button" title="Fitur segera tersedia"><MessageCircle /> Preview komentar</button>
+                <button type="button" onClick={() => setPreview("profile")}><Eye /> Preview profil</button>
+                <button type="button" onClick={() => setPreview("comment")}><MessageCircle /> Preview komentar</button>
               </div>
 
               <div className="profile-custom-actions">
-                <button type="button" title="Fitur segera tersedia"><Paintbrush /> Warna nama</button>
-                <button type="button" title="Fitur segera tersedia"><Sparkles /> Kultivasi</button>
+                <button type="button" onClick={() => void editNameColor()}><Paintbrush /> Warna nama</button>
+                <button type="button" onClick={() => void editCultivation()}><Sparkles /> Kultivasi</button>
               </div>
             </div>
 
@@ -222,21 +318,21 @@ export function ProfileScreen() {
 
             <section className="profile-social-card">
               <div className="profile-social-counters">
-                <div><strong>0</strong><span>Pengikut</span></div>
-                <div><strong>0</strong><span>Mengikuti</span></div>
-                <div><strong>0</strong><span>Koin</span></div>
+                <div><strong>{social.followers_count ?? 0}</strong><span>Pengikut</span></div>
+                <div><strong>{social.following_count ?? 0}</strong><span>Mengikuti</span></div>
+                <div><strong>{social.coins_total ?? 0}</strong><span>Koin</span></div>
               </div>
               <div className="profile-social-actions">
-                <button type="button" title="Fitur segera tersedia"><Users /> Koneksi</button>
-                <button type="button" title="Fitur segera tersedia"><Search /> Cari</button>
+                <button type="button" onClick={() => void showConnections()}><Users /> Koneksi</button>
+                <button type="button" onClick={() => void searchPeople()}><Search /> Cari</button>
               </div>
               <div className="profile-social-divider" />
               <h2>Jejak tontonan</h2>
               <div className="profile-watch-counters">
-                <div><Film /><strong>0</strong><span>Anime</span></div>
-                <div><Play /><strong>0</strong><span>Donghua</span></div>
-                <div><Clapperboard /><strong>0</strong><span>Movie</span></div>
-                <div><BookOpen /><strong>0</strong><span>Bab Novel</span></div>
+                <div><Film /><strong>{social.anime_watched_count ?? 0}</strong><span>Anime</span></div>
+                <div><Play /><strong>{social.donghua_watched_count ?? 0}</strong><span>Donghua</span></div>
+                <div><Clapperboard /><strong>{social.movie_watched_count ?? 0}</strong><span>Movie</span></div>
+                <div><BookOpen /><strong>{social.novel_read_count ?? 0}</strong><span>Bab Novel</span></div>
               </div>
             </section>
           </section>
@@ -244,6 +340,18 @@ export function ProfileScreen() {
           <div className="profile-sync-note"><ShieldCheck /><span>Login tersinkron dengan APK, EXE, dan web</span></div>
           <button type="button" className="profile-signout" onClick={() => void signOut()} disabled={busy}><LogOut /> Keluar</button>
           {error ? <p className="profile-error">{error}</p> : null}
+          {preview ? (
+            <div className="profile-preview-modal" role="dialog" aria-modal="true" aria-label={preview === "profile" ? "Preview profil" : "Preview komentar"} onClick={() => setPreview(null)}>
+              <div onClick={(event) => event.stopPropagation()}>
+                <button type="button" className="profile-preview-close" onClick={() => setPreview(null)}>×</button>
+                <p>{preview === "profile" ? "Tampilan profilmu untuk orang lain" : "Tampilan komentarmu untuk orang lain"}</p>
+                <div className={preview === "comment" ? "profile-comment-preview" : "profile-public-preview"}>
+                  <span className="profile-mini-avatar">{avatar ? <Image src={avatar} alt="" fill sizes="44px" unoptimized /> : name.slice(0, 1).toUpperCase()}</span>
+                  <div><strong style={nameColor ? { color: nameColor } : undefined}>{name}</strong>{verified ? <CheckCircle2 size={14} color="#2196F3" fill="currentColor" /> : null}<small>Level {level}</small>{preview === "comment" ? <p>Ini contoh tampilan komentar kamu. Preview ini tidak akan dipublikasikan.</p> : null}</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </main>

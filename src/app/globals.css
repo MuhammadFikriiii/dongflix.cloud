@@ -592,11 +592,14 @@ button {
   color: white;
   font-size: 34px;
   font-weight: 900;
+  padding: 0;
+  cursor: pointer;
 }
 
 .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .profile-camera-badge { position: absolute; right: -2px; bottom: -2px; display: grid; width: 30px; height: 30px; place-items: center; border: 2px solid var(--surface); border-radius: 50%; background: var(--accent); color: white; }
 .profile-camera-badge svg { width: 14px; }
+.profile-file-input { display: none; }
 
 .profile-identity {
   position: absolute;
@@ -607,7 +610,10 @@ button {
   border: 1px solid rgba(255,255,255,.12);
   border-radius: 14px;
   background: rgba(0,0,0,.42);
+  color: inherit;
+  font: inherit;
   text-align: center;
+  cursor: pointer;
 }
 
 .profile-name-row { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
@@ -654,6 +660,19 @@ button {
 .profile-signout:disabled { opacity: .6; cursor: wait; }
 .profile-signout svg { width: 17px; }
 .profile-error { margin: 14px 0 0; color: #ff9696; font-size: 13px; text-align: center; }
+
+.profile-preview-modal { position: fixed; z-index: 90; inset: 0; display: grid; padding: 20px; place-items: center; background: rgba(0,0,0,.72); backdrop-filter: blur(8px); }
+.profile-preview-modal > div { position: relative; width: min(100%,470px); padding: 24px; border: 1px solid rgba(255,255,255,.11); border-radius: 20px; background: var(--surface); box-shadow: 0 24px 70px rgba(0,0,0,.4); }
+.profile-preview-modal > div > p { margin: 0 30px 18px 0; color: var(--text-secondary); font-size: 13px; }
+.profile-preview-close { position: absolute; top: 10px; right: 12px; width: 34px; height: 34px; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 25px; cursor: pointer; }
+.profile-public-preview, .profile-comment-preview { display: flex; align-items: flex-start; gap: 11px; padding: 14px; border: 1px solid rgba(255,255,255,.09); border-radius: 15px; background: var(--background); }
+.profile-mini-avatar { position: relative; display: grid; width: 44px; height: 44px; flex: 0 0 auto; overflow: hidden; place-items: center; border-radius: 50%; background: var(--accent); color: white; font-weight: 900; }
+.profile-mini-avatar img { object-fit: cover; }
+.profile-public-preview > div, .profile-comment-preview > div { min-width: 0; flex: 1; }
+.profile-public-preview strong, .profile-comment-preview strong { display: inline-block; margin-right: 5px; font-size: 13px; }
+.profile-public-preview svg, .profile-comment-preview svg { vertical-align: -2px; }
+.profile-public-preview small, .profile-comment-preview small { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 10px; }
+.profile-comment-preview p { margin: 8px 0 0; color: var(--text-primary); font-size: 12px; line-height: 1.45; }
 
 .auth-callback-page { display: grid; min-height: 100dvh; place-content: center; padding: 24px; background: var(--background); text-align: center; }
 .auth-callback-page h1 { margin: 0 0 8px; font-size: 22px; }
