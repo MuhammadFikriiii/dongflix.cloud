@@ -169,7 +169,7 @@ export function ProfileScreen() {
   };
 
   const editCultivation = async () => {
-    const next = window.prompt("Pilih tampilan: level, martial, immortal, soul_land, atau perfect_world", profile?.cultivation_path || "level")?.trim();
+    const next = window.prompt("Pilih tampilan: level, renegade_immortal, perfect_world, atau battle_through_the_heavens", profile?.cultivation_path || "level")?.trim();
     if (!next) return;
     const result = await getSupabaseBrowserClient()?.rpc("set_cultivation_path", { p_path: next });
     if (result?.error) return setError("Pilihan tingkat kultivasi belum dapat disimpan.");
@@ -294,7 +294,7 @@ export function ProfileScreen() {
                 </button>
               </ProfileHeader>
 
-              <div className="profile-rank-chip"><Sparkles /> {profile?.cultivation_path === "level" || !profile?.cultivation_path ? `Level ${level}` : `${profile.cultivation_path} • Level ${level}`}</div>
+              <div className="profile-rank-chip"><Sparkles /> {profile?.cultivation_path === "level" || !profile?.cultivation_path ? `Level ${level}` : `${profile.cultivation_path.replaceAll("_", " ")} • Level ${level}`}</div>
 
               <div className="profile-preview-actions">
                 <button type="button" onClick={() => setPreview("profile")}><Eye /> Preview profil</button>
